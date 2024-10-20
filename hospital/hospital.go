@@ -12,8 +12,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/sec1handin2/hospital/types"
-	"github.com/sec1handin2/hospital/util"
+	"github.com/JonasSkjodt/security_2/hospital/types"
+	"github.com/JonasSkjodt/security_2/hospital/util"
 )
 
 var client *http.Client
