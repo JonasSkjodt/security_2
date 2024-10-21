@@ -92,59 +92,59 @@ func main() {
 	select {} // Keep the server running
 }
 
-// List of ports of other patients provided by hospital
+// Patients handles the POST request from the hospital
 func Patients(w http.ResponseWriter, req *http.Request) {
 	if req.Method == "POST" {
 		log.Println(port, ": Patient received POST /patients")
 
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			log.Fatal(port, ": Error when reading request body during /patients:", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		patients := &Patient{}
-		err = json.Unmarshal(body, patients)
-		if err != nil {
-			log.Fatal(port, ": Error when unmarshalling patients:", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("%d: Error reading request body: %v", port, err), http.StatusInternalServerError)
 			return
 		}
 
+		var patients Patient
+		if err := json.Unmarshal(body, &patients); err != nil {
+			http.Error(w, fmt.Sprintf("%d: Error unmarshalling patients: %v", port, err), http.StatusInternalServerError)
+			return
+		}
+		
 		shares := CreateShares(maxRanVal, data, totalPatients) 
 
-		log.Println(port, ": Sending shares to other patients")
-		for i, share := range shares { // Send a share to each other patient
-			if i == totalPatients-1 {
+		log.Println(port, ": Patient received list of patients:", patients.PortsList)
+		for index, shareValue := range shares { // Send a share to each other patient
+			if index == totalPatients-1 {
 				break
 			}
-			ownShare := Share{
-				Share: share,
-			}
-			b, err := json.Marshal(ownShare)
-			if err != nil {
-				log.Fatal(port, ": Error when marshalling share during /patients:", err)
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			url := fmt.Sprintf("https://localhost:%d/shares", patients.PortsList[i])
-			response, err := client.Post(url, "string", bytes.NewReader(b))
-			if err != nil {
-				log.Fatal(port, ": Error when sending share to", patients.PortsList[i], ":", err)
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			log.Println(port, ": Sent share to, ", patients.PortsList[i], ". Received response code:", response.StatusCode)
+			go func(index, shareValue int) {
+				share := Share{
+					Share: shareValue,
+				}
+				shareBytes, err := json.Marshal(share)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("%d: Error when marshalling share during /patients: %v", port, err), http.StatusInternalServerError)
+					return
+				}
+				url := fmt.Sprintf("https://localhost:%d/shares", patients.PortsList[index])
+				response, err := client.Post(url, "application/json", bytes.NewReader(shareBytes))
+				if err != nil {
+					log.Println(port, ": Error when sending share to", patients.PortsList[index], ":", err)
+					return
+				}
+				log.Println(port, ": Sent share to", patients.PortsList[index], ". Received response code:", response.StatusCode)
+			}(index, shareValue)
 		}
 
-		receivedShares = append(receivedShares, shares[len(shares)-1]) // Add own share to list of receivedShares
+		// Append the last share to the receivedShares list
+		receivedShares = append(receivedShares, shares[len(shares)-1])
 
+		// Check if all shares have been received
 		if len(receivedShares) == totalPatients {
 			sendAggregateShare()
 		}
 
+		// Respond with status OK
 		w.WriteHeader(http.StatusOK)
-
 	}
 }
 
@@ -154,15 +154,13 @@ func Shares(w http.ResponseWriter, req *http.Request) {
 
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			log.Fatal(port, ": Error when reading request body during /shares:", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("%d: Error when reading request body during /shares: %v", port, err), http.StatusInternalServerError)
 			return
 		}
 		foreignShare := &Share{}
 		err = json.Unmarshal(body, foreignShare)
 		if err != nil {
-			log.Fatal(port, ": Error when unmarshalling share:", err)
-			w.WriteHeader(http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("%d: Error when unmarshalling share: %v", port, err), http.StatusInternalServerError)
 			return
 		}
 
