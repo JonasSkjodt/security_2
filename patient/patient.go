@@ -154,11 +154,11 @@ func sendAggregateShare() {
 func patientServer() {
 	log.Println(port, ": Creating patient server")
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/patients", Patients)
-	mux.HandleFunc("/shares", Shares)
+	router := http.NewServeMux()
+	router.HandleFunc("/patients", Patients)
+	router.HandleFunc("/shares", Shares)
 
-	err := http.ListenAndServeTLS(StringifyPort(port), "server.crt", "server.key", mux)
+	err := http.ListenAndServeTLS(StringifyPort(port), "server.crt", "server.key", router)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -239,8 +239,4 @@ func main() {
 		log.Fatal(port, ": Error when regisering with hospital:", err)
 	}
 	log.Println(port, ": Registered with hospital, received response code", response.Status)
-
-	for {
-	}
-
 }
