@@ -13,10 +13,16 @@ import (
 	"math/rand"
 	"net/http"
 	"time"
-
-	"github.com/JonasSkjodt/security_2/patient/types"
-	"github.com/JonasSkjodt/security_2/patient/util"
 )
+
+type Patient struct {
+	Port int
+	PortsList []int
+}
+
+type Share struct {
+	Share int
+}
 
 var client *http.Client
 var data int
@@ -37,7 +43,7 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(418)
 			return
 		}
-		patients := &types.Patients{}
+		patients := &Patient{}
 		err = json.Unmarshal(body, patients)
 		if err != nil {
 			log.Fatal(port, ": Error when unmarshalling patients:", err)
@@ -45,14 +51,14 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		shares := util.CreateShares(dataMax, data, totalPatients) // Create shares from own data
+		shares := CreateShares(dataMax, data, totalPatients) 
 
 		log.Println(port, ": Sending shares to other patients")
 		for i, share := range shares { // Send a share to each other patient
 			if i == totalPatients-1 {
 				break
 			}
-			ownShare := types.Share{
+			ownShare := Share{
 				Share: share,
 			}
 			b, err := json.Marshal(ownShare)
@@ -92,7 +98,7 @@ func Shares(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(418)
 			return
 		}
-		foreignShare := &types.Share{}
+		foreignShare := &Share{}
 		err = json.Unmarshal(body, foreignShare)
 		if err != nil {
 			log.Fatal(port, ": Error when unmarshalling share:", err)
@@ -125,7 +131,7 @@ func sendAggregateShare() {
 
 	log.Println(port, ": aggregate share is ", aggregateShare)
 
-	aggregate := types.Share{
+	aggregate := Share{
 		Share: aggregateShare,
 	}
 
@@ -152,11 +158,30 @@ func patientServer() {
 	mux.HandleFunc("/patients", Patients)
 	mux.HandleFunc("/shares", Shares)
 
-	err := http.ListenAndServeTLS(util.StringifyPort(port), "server.crt", "server.key", mux)
+	err := http.ListenAndServeTLS(StringifyPort(port), "server.crt", "server.key", mux)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+}
+
+func StringifyPort(port int) string {
+	return fmt.Sprintf(":%d", port)
+}
+
+func CreateShares(p int, data int, amount int) []int {
+	var shares []int
+	var totalShares int
+
+	for i := 0; i < amount-1; i++ {
+		share := rand.Intn(p-1) + 1
+		shares = append(shares, share)
+		totalShares += share
+	}
+
+	shares = append(shares, data-totalShares)
+
+	return shares
 }
 
 func main() {
@@ -200,7 +225,7 @@ func main() {
 
 	url := fmt.Sprintf("https://localhost:%d/patient", hospitalPort)
 
-	ownPort := types.Patient{
+	ownPort := Patient{
 		Port: port,
 	}
 

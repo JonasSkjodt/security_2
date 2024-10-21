@@ -12,9 +12,17 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/JonasSkjodt/security_2/hospital/types"
-	"github.com/JonasSkjodt/security_2/hospital/util"
 )
+
+type Share struct {
+	Share int
+}
+
+type Patient struct {
+	Port int
+	PortsList []int
+}
+
 
 var client *http.Client
 var patients []int
@@ -35,7 +43,7 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(418)
 			return
 		}
-		receivedPort := &types.Patient{}
+		receivedPort := &Patient{}
 		err = json.Unmarshal(body, receivedPort)
 		if err != nil {
 			log.Fatal(port, ": Error when unmarshalling port:", err)
@@ -62,7 +70,7 @@ func Shares(w http.ResponseWriter, req *http.Request) {
 			w.WriteHeader(418)
 			return
 		}
-		share := &types.Share{}
+		share := &Share{}
 		err = json.Unmarshal(body, share)
 		if err != nil {
 			log.Fatal(port, ": Error when unmarshalling share:", err)
@@ -80,6 +88,10 @@ func Shares(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func StringifyPort(port int) string {
+	return fmt.Sprintf(":%d", port)
+}
+
 func hospitalServer() {
 	log.Println(port, ": Creating hospital server")
 
@@ -87,7 +99,7 @@ func hospitalServer() {
 	mux.HandleFunc("/patient", Patients)
 	mux.HandleFunc("/shares", Shares)
 
-	err := http.ListenAndServeTLS(util.StringifyPort(port), "server.crt", "server.key", mux)
+	err := http.ListenAndServeTLS(StringifyPort(port), "server.crt", "server.key", mux)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -103,7 +115,7 @@ func sendPorts() {
 
 		log.Println(port, ": Sending ports", otherPatients, " to", p)
 		url := fmt.Sprintf("https://localhost:%d/patients", p)
-		patientPorts := types.Patients{
+		patientPorts := Patient{
 			PortsList: otherPatients,
 		}
 
