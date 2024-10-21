@@ -38,10 +38,10 @@ var maxCompVal int
 
 func main() {
 
-	flag.IntVar(&port, "port", 8081, "port for patient")
 	flag.IntVar(&hospitalPort, "h", 8080, "port of the hospital")
-	flag.IntVar(&totalPatients, "t", 3, "the total amount of patients")
+	flag.IntVar(&port, "port", 8081, "port for patient")
 	flag.IntVar(&maxCompVal, "maxCompVal", 500, "the max value that the final computation can have")
+	flag.IntVar(&totalPatients, "t", 3, "the total amount of patients")
 
 	flag.Parse()
 
@@ -68,7 +68,8 @@ func main() {
 		},
 	}
 
-	go patientServer() // Run the server
+	// Start the patient server
+	go patientServer()
 
 	// Register patient with hospital
 	log.Println(port, ": Patient registering with hospital")
@@ -114,13 +115,15 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("%d: Error reading request body: %v", port, err), http.StatusInternalServerError)
+			//http.Error(w, fmt.Sprintf("%d: Error reading request body: %v", port, err), http.StatusBadRequest)
+			handleError(w, port, err, "Error reading request body")
 			return
 		}
 
 		var patients Patient
 		if err := json.Unmarshal(body, &patients); err != nil {
-			http.Error(w, fmt.Sprintf("%d: Error unmarshalling patients: %v", port, err), http.StatusInternalServerError)
+			//http.Error(w, fmt.Sprintf("%d: Error unmarshalling patients: %v", port, err), http.StatusBadRequest)
+			handleError(w, port, err, "Error unmarshalling patients")
 			return
 		}
 		
@@ -138,7 +141,8 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 				}
 				shareBytes, err := json.Marshal(share)
 				if err != nil {
-					http.Error(w, fmt.Sprintf("%d: Error when marshalling share during /patients: %v", port, err), http.StatusInternalServerError)
+					//http.Error(w, fmt.Sprintf("%d: Error when marshalling share during /patients: %v", port, err), http.StatusInternalServerError)
+					handleError(w, port, err, "Error when marshalling share during /patients")
 					return
 				}
 				url := fmt.Sprintf("https://localhost:%d/shares", patients.PortsList[index])
@@ -156,20 +160,21 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 		handleReceivedShare(w)
 	}
 }
-
+// handles the POST request from the patients
 func Shares(w http.ResponseWriter, req *http.Request) {
 	if req.Method == "POST" {
-		log.Println(port, ": Patient received POST /shares")
+		log.Println(port, ": Patient received POST here /shares")
 
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("%d: Error when reading request body during /shares: %v", port, err), http.StatusInternalServerError)
+			handleError(w, port, err, "Error when reading request body during /shares")
 			return
 		}
+
 		receivedShare := &Share{}
 		err = json.Unmarshal(body, receivedShare)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("%d: Error when unmarshalling share: %v", port, err), http.StatusInternalServerError)
+			handleError(w, port, err, "Error when unmarshalling share")
 			return
 		}
 		// Append the received share to the receivedShares list
@@ -208,7 +213,6 @@ func sendAggregateShare() {
 	log.Println(port, ": Sent aggregate share to hospital, received response code", response.StatusCode)
 }
 
-
 // GenerateShares with n-out-of-n additive secret share
 func GenerateShares(p int, data int, amount int) []int {
 	var shares []int
@@ -225,6 +229,7 @@ func GenerateShares(p int, data int, amount int) []int {
 	return shares
 }
 
+// helper function to format the port
 func FormatPort(port int) string {
 	return fmt.Sprintf(":%d", port)
 }
@@ -238,4 +243,9 @@ func handleReceivedShare(w http.ResponseWriter) {
 
 	// Respond with status OK
 	w.WriteHeader(http.StatusOK)
+}
+
+// Helper function to handle errors
+func handleError(w http.ResponseWriter, port int, err error, message string) {
+    http.Error(w, fmt.Sprintf("%d: %s: %v", port, message, err), http.StatusInternalServerError)
 }
