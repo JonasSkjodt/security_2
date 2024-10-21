@@ -40,14 +40,14 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			log.Fatal(port, ": Error when reading request body during /patients:", err)
-			w.WriteHeader(418)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		patients := &Patient{}
 		err = json.Unmarshal(body, patients)
 		if err != nil {
 			log.Fatal(port, ": Error when unmarshalling patients:", err)
-			w.WriteHeader(418)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -64,14 +64,14 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 			b, err := json.Marshal(ownShare)
 			if err != nil {
 				log.Fatal(port, ": Error when marshalling share during /patients:", err)
-				w.WriteHeader(418)
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 			url := fmt.Sprintf("https://localhost:%d/shares", patients.PortsList[i])
 			response, err := client.Post(url, "string", bytes.NewReader(b))
 			if err != nil {
 				log.Fatal(port, ": Error when sending share to", patients.PortsList[i], ":", err)
-				w.WriteHeader(418)
+				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 			log.Println(port, ": Sent share to, ", patients.PortsList[i], ". Received response code:", response.StatusCode)
@@ -83,7 +83,7 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 			sendAggregateShare()
 		}
 
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 
 	}
 }
@@ -95,14 +95,14 @@ func Shares(w http.ResponseWriter, req *http.Request) {
 		body, err := io.ReadAll(req.Body)
 		if err != nil {
 			log.Fatal(port, ": Error when reading request body during /shares:", err)
-			w.WriteHeader(418)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		foreignShare := &Share{}
 		err = json.Unmarshal(body, foreignShare)
 		if err != nil {
 			log.Fatal(port, ": Error when unmarshalling share:", err)
-			w.WriteHeader(418)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
@@ -112,7 +112,7 @@ func Shares(w http.ResponseWriter, req *http.Request) {
 			sendAggregateShare()
 		}
 
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 
 	}
 
@@ -154,11 +154,11 @@ func sendAggregateShare() {
 func patientServer() {
 	log.Println(port, ": Creating patient server")
 
-	router := http.NewServeMux()
-	router.HandleFunc("/patients", Patients)
-	router.HandleFunc("/shares", Shares)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/patients", Patients)
+	mux.HandleFunc("/shares", Shares)
 
-	err := http.ListenAndServeTLS(StringifyPort(port), "server.crt", "server.key", router)
+	err := http.ListenAndServeTLS(StringifyPort(port), "server.crt", "server.key", mux)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -239,4 +239,7 @@ func main() {
 		log.Fatal(port, ": Error when regisering with hospital:", err)
 	}
 	log.Println(port, ": Registered with hospital, received response code", response.Status)
+
+	select {} // Keep the server running
+
 }

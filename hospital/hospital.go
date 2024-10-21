@@ -14,13 +14,13 @@ import (
 
 )
 
-type Share struct {
-	Share int
-}
-
 type Patient struct {
 	Port int
 	PortsList []int
+}
+
+type Share struct {
+	Share int
 }
 
 
