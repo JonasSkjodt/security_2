@@ -29,8 +29,9 @@ var data int
 var hospitalPort int
 var port int
 var maxRanVal int
+var aggregateShare int
 var totalPatients int
-var receivedShares []int
+var sharesReceived []int
 var maxCompVal int
 
 
@@ -92,6 +93,20 @@ func main() {
 	select {} // Keep the server running
 }
 
+// creates server for patient
+func patientServer() {
+	log.Printf("Creating patient server for: %d", port)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/patients", Patients)
+	mux.HandleFunc("/shares", Shares)
+
+	err := http.ListenAndServeTLS(FormatPort(port), "server.crt", "server.key", mux)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 // Patients handles the POST request from the hospital
 func Patients(w http.ResponseWriter, req *http.Request) {
 	if req.Method == "POST" {
@@ -109,10 +124,11 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		
-		shares := CreateShares(maxRanVal, data, totalPatients) 
+		shares := GenerateShares(maxRanVal, data, totalPatients) 
 
 		log.Println(port, ": Patient received list of patients:", patients.PortsList)
-		for index, shareValue := range shares { // Send a share to each other patient
+		// Send shares to patients
+		for index, shareValue := range shares {
 			if index == totalPatients-1 {
 				break
 			}
@@ -134,17 +150,10 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 				log.Println(port, ": Sent share to", patients.PortsList[index], ". Received response code:", response.StatusCode)
 			}(index, shareValue)
 		}
-
 		// Append the last share to the receivedShares list
-		receivedShares = append(receivedShares, shares[len(shares)-1])
+		sharesReceived = append(sharesReceived, shares[len(shares)-1])
 
-		// Check if all shares have been received
-		if len(receivedShares) == totalPatients {
-			sendAggregateShare()
-		}
-
-		// Respond with status OK
-		w.WriteHeader(http.StatusOK)
+		handleReceivedShare(w)
 	}
 }
 
@@ -157,31 +166,23 @@ func Shares(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, fmt.Sprintf("%d: Error when reading request body during /shares: %v", port, err), http.StatusInternalServerError)
 			return
 		}
-		foreignShare := &Share{}
-		err = json.Unmarshal(body, foreignShare)
+		receivedShare := &Share{}
+		err = json.Unmarshal(body, receivedShare)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("%d: Error when unmarshalling share: %v", port, err), http.StatusInternalServerError)
 			return
 		}
+		// Append the received share to the receivedShares list
+		sharesReceived = append(sharesReceived, receivedShare.Share)
 
-		receivedShares = append(receivedShares, foreignShare.Share) // Add received share to list of received shares
-
-		if len(receivedShares) == totalPatients {
-			sendAggregateShare()
-		}
-
-		w.WriteHeader(http.StatusOK)
+		handleReceivedShare(w)
 	}
 }
 
 func sendAggregateShare() {
 	log.Println(port, ": Computing aggregate share")
-	// If all shares have been received,
-	// calculate and aggregate share and send it to the hospital
 
-	var aggregateShare int
-
-	for _, share := range receivedShares {
+	for _, share := range sharesReceived {
 		aggregateShare = aggregateShare + share
 	}
 
@@ -207,25 +208,9 @@ func sendAggregateShare() {
 	log.Println(port, ": Sent aggregate share to hospital, received response code", response.StatusCode)
 }
 
-func patientServer() {
-	log.Println(port, ": Creating patient server")
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/patients", Patients)
-	mux.HandleFunc("/shares", Shares)
-
-	err := http.ListenAndServeTLS(StringifyPort(port), "server.crt", "server.key", mux)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-}
-
-func StringifyPort(port int) string {
-	return fmt.Sprintf(":%d", port)
-}
-
-func CreateShares(p int, data int, amount int) []int {
+// GenerateShares with n-out-of-n additive secret share
+func GenerateShares(p int, data int, amount int) []int {
 	var shares []int
 	var totalShares int
 
@@ -240,3 +225,17 @@ func CreateShares(p int, data int, amount int) []int {
 	return shares
 }
 
+func FormatPort(port int) string {
+	return fmt.Sprintf(":%d", port)
+}
+
+// Helper function which checks if all shares have been received and sends the aggregate share to the hospital
+func handleReceivedShare(w http.ResponseWriter) {
+	// Check if all shares have been received
+	if len(sharesReceived) == totalPatients {
+		sendAggregateShare()
+	}
+
+	// Respond with status OK
+	w.WriteHeader(http.StatusOK)
+}
