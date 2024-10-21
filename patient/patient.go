@@ -8,7 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io"
-	"io/ioutil"
+	"os"
 	"net/http"
 	"log"
 	"math/rand"
@@ -28,9 +28,69 @@ var client *http.Client
 var data int
 var hospitalPort int
 var port int
-var max int
+var maxRanVal int
 var totalPatients int
 var receivedShares []int
+var maxCompVal int
+
+
+
+func main() {
+
+	flag.IntVar(&port, "port", 8081, "port for patient")
+	flag.IntVar(&hospitalPort, "h", 8080, "port of the hospital")
+	flag.IntVar(&totalPatients, "t", 3, "the total amount of patients")
+	flag.IntVar(&maxCompVal, "maxCompVal", 500, "the max value that the final computation can have")
+
+	flag.Parse()
+
+	maxRanVal = maxCompVal / 3
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	data = r.Intn(maxRanVal)
+
+	log.Println(port, ": New patient with data =", data)
+
+	// Load in the certification from file server.crt
+	cert, err := os.ReadFile("server.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	certPool := x509.NewCertPool()
+	certPool.AppendCertsFromPEM(cert)
+
+	client = &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: certPool,
+			},
+		},
+	}
+
+	go patientServer() // Run the server
+
+	// Register patient with hospital
+	log.Println(port, ": Patient registering with hospital")
+
+	url := fmt.Sprintf("https://localhost:%d/patient", hospitalPort)
+
+	ownPort := Patient{
+		Port: port,
+	}
+
+	b, err := json.Marshal(ownPort)
+	if err != nil {
+		log.Fatal(port, ": Error when marshalling patient:", err)
+	}
+
+	response, err := client.Post(url, "string", bytes.NewReader(b))
+	if err != nil {
+		log.Fatal(port, ": Error when regisering with hospital:", err)
+	}
+	log.Println(port, ": Registered with hospital, received response code", response.Status)
+
+	select {} // Keep the server running
+}
 
 // List of ports of other patients provided by hospital
 func Patients(w http.ResponseWriter, req *http.Request) {
@@ -51,7 +111,7 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		shares := CreateShares(max, data, totalPatients) 
+		shares := CreateShares(maxRanVal, data, totalPatients) 
 
 		log.Println(port, ": Sending shares to other patients")
 		for i, share := range shares { // Send a share to each other patient
@@ -113,9 +173,7 @@ func Shares(w http.ResponseWriter, req *http.Request) {
 		}
 
 		w.WriteHeader(http.StatusOK)
-
 	}
-
 }
 
 func sendAggregateShare() {
@@ -129,7 +187,7 @@ func sendAggregateShare() {
 		aggregateShare = aggregateShare + share
 	}
 
-	log.Println(port, ": aggregate share is ", aggregateShare)
+	log.Println(port, ": aggregate share is", aggregateShare)
 
 	aggregate := Share{
 		Share: aggregateShare,
@@ -184,62 +242,3 @@ func CreateShares(p int, data int, amount int) []int {
 	return shares
 }
 
-func main() {
-
-	var r int
-
-	flag.IntVar(&port, "port", 8081, "port for patient")
-	flag.IntVar(&hospitalPort, "h", 8080, "port of the hospital")
-	flag.IntVar(&totalPatients, "t", 3, "the total amount of patients")
-	flag.IntVar(&r, "r", 500, "the max value that the final computation can have")
-
-	flag.Parse()
-
-	max = r / 3
-
-	rand.Seed(time.Now().UnixNano())
-	data = rand.Intn(max)
-
-	log.Println(port, ": New patient with data =", data)
-
-	// Load in the certification from file server.crt
-	cert, err := ioutil.ReadFile("server.crt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	certPool := x509.NewCertPool()
-	certPool.AppendCertsFromPEM(cert)
-
-	client = &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs: certPool,
-			},
-		},
-	}
-
-	go patientServer() // Run the server
-
-	// Register patient with hospital
-	log.Println(port, ": Patient registering with hospital")
-
-	url := fmt.Sprintf("https://localhost:%d/patient", hospitalPort)
-
-	ownPort := Patient{
-		Port: port,
-	}
-
-	b, err := json.Marshal(ownPort)
-	if err != nil {
-		log.Fatal(port, ": Error when marshalling patient:", err)
-	}
-
-	response, err := client.Post(url, "string", bytes.NewReader(b))
-	if err != nil {
-		log.Fatal(port, ": Error when regisering with hospital:", err)
-	}
-	log.Println(port, ": Registered with hospital, received response code", response.Status)
-
-	select {} // Keep the server running
-
-}
