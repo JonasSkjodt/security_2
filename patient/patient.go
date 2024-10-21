@@ -1,17 +1,17 @@
 package main
 
 import (
+	"fmt"
+	"flag"
 	"bytes"
+	"encoding/json"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
-	"flag"
-	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"log"
 	"math/rand"
-	"net/http"
 	"time"
 )
 
@@ -28,7 +28,7 @@ var client *http.Client
 var data int
 var hospitalPort int
 var port int
-var dataMax int
+var max int
 var totalPatients int
 var receivedShares []int
 
@@ -51,7 +51,7 @@ func Patients(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		shares := CreateShares(dataMax, data, totalPatients) 
+		shares := CreateShares(max, data, totalPatients) 
 
 		log.Println(port, ": Sending shares to other patients")
 		for i, share := range shares { // Send a share to each other patient
@@ -195,10 +195,10 @@ func main() {
 
 	flag.Parse()
 
-	dataMax = r / 3
+	max = r / 3
 
 	rand.Seed(time.Now().UnixNano())
-	data = rand.Intn(dataMax)
+	data = rand.Intn(max)
 
 	log.Println(port, ": New patient with data =", data)
 
